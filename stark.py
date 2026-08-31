@@ -2,7 +2,6 @@ import os
 import re
 import time
 import requests
-from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
@@ -54,7 +53,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not midas_url:
         return
 
-    msg = await update.message.reply_text("🔄 جاري جلب اللوجز الكاملة...")
+    msg = await update.message.reply_text("🔄 جاري فحص الرابط وطباعة اللوجز...")
     start_time = time.time()
 
     try:
@@ -66,17 +65,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = requests.get(midas_url.strip(), cookies=COOKIES_DICT, headers=headers, timeout=15)
         html_content = response.text
 
-        # طباعة الاستجابة بالكامل في لوجز ريلواي بدون أي قص
-        print("================== [FULL HTML START] ==================")
+        # طباعة الاستجابة بالكامل في لوجز ريلواي بدون أي أخطاء مفقودة
+        print("================== [RAW HTML START] ==================")
         print(html_content)
-        print("================== [FULL HTML END] ====================")
+        print("================== [RAW HTML END] ====================")
 
         elapsed_time = round(time.time() - start_time, 1)
 
         await msg.edit_text(
-            f"🛡️ <b>Midasbuy Bot (Full Logged)</b>\n\n"
+            f"🛡️ <b>Midasbuy Bot (Clean Logged)</b>\n\n"
             f"⏱️ <b>في:</b> {elapsed_time} ثانية\n"
-            f"✅ <b>الحالة:</b> تم طباعة الصفحة كاملة في لوجز ريلواي!",
+            f"✅ <b>الحالة:</b> تم فحص الرابط وطباعة اللوجز بنجاح!",
             parse_mode="HTML"
         )
 
@@ -86,7 +85,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("Full HTML Logger Bot is running...")
+    print("Clean Logger Bot is running...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

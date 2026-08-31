@@ -62,11 +62,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Referer": "https://www.midasbuy.com/"
         }
         
-        # 1. طلب الـ short_link الأساسي
         response = requests.get(midas_url.strip(), cookies=COOKIES_DICT, headers=headers, timeout=15)
         html_content = response.text
 
-        # 2. استخراج الـ redirectUrl من متغير jsData جوا الصفحة بالريجكس
         redirect_match = re.search(r'["\']redirectUrl["\']\s*:\s*["\']([^"\']+)["\']', html_content)
         
         if not redirect_match:
@@ -75,15 +73,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         redirect_url = redirect_match.group(1).replace(r'\u0026', '&')
         
-        # 3. فتح رابط التحويل الحقيقي لجلب صفحة الفعالية الفعلية اللي جواها الأيدي
         res_redirect = requests.get(redirect_url, cookies=COOKIES_DICT, headers=headers, timeout=15)
         final_page = res_redirect.text
 
-        # 4. البحث عن رقم الأيدي (معرف اللاعب) والاسم داخل صفحة الفعالية النهائية
-        # أرقام ببجي عادة بتكون مكونة من 9 لـ 11 رقم في بيانات الـ API أو الهيدر
         player_id_match = re.search(r'\b(\d{9,11})\b', final_page)
         
-        # محاولة البحث عن اسم المستخدم لو موجود في الـ JSON جوه الصفحة النهائية
         player_name = "مستخدم ميداسباي"
         name_match = re.search(r'["\'](?:nickName|playerName|roleName|name)["\']\s*[:=]\s*["\']([^"\']+)["\']', final_page)
         if name_match:
@@ -111,5 +105,5 @@ def main():
     print("Real Extractor Bot is running...")
     app.run_polling(drop_pending_updates=True)
 
-if __name__ == 'main__':
+if __name__ == '__main__':
     main()

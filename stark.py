@@ -2,12 +2,12 @@ import os
 import re
 import time
 import requests
+from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 BOT_TOKEN = "8967404868:AAFvirissJhm9Y3uDGkMd5WNEWDkmMViKfA"
 
-# الكوكيز الحقيقية بتاعتك
 RAW_COOKIES = """
 .midasbuy.com	TRUE	/	FALSE	1795804844	_gcl_au	1.1.786793852.1788028844
 .midasbuy.com	TRUE	/	FALSE	1788279879	_gid	GA1.2.1911735912.1788028844
@@ -38,9 +38,7 @@ def parse_netscape_cookies(cookie_text):
         if line.strip() and not line.startswith('#'):
             parts = line.split()
             if len(parts) >= 7:
-                name = parts[5]
-                value = parts[6]
-                cookies_dict[name] = value
+                cookies_dict[parts[5]] = parts[6]
     return cookies_dict
 
 COOKIES_DICT = parse_netscape_cookies(RAW_COOKIES)
@@ -56,48 +54,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not midas_url:
         return
 
-    msg = await update.message.reply_text("🔄 جاري فحص الرابط حقيقياً...")
+    msg = await update.message.reply_text("🔄 جاري جلب اللوجز الكاملة...")
     start_time = time.time()
 
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://www.midasbuy.com/",
-            "Accept": "application/json, text/plain, */*"
+            "Referer": "https://www.midasbuy.com/"
         }
         
-        # إرسال طلب حقيقي بالكوكي
         response = requests.get(midas_url.strip(), cookies=COOKIES_DICT, headers=headers, timeout=15)
-        
-        # طباعة الاستجابة الخام في لوجز ريلواي عشان نشوف محتواها الحقيقي بدقة
-        print(f"--- RAW RESPONSE FOR {midas_url} ---")
-        print(response.text[:1000]) # أول 1000 حرف للتأكد
-        print("---------------------------------------")
+        html_content = response.text
+
+        # طباعة الاستجابة بالكامل في لوجز ريلواي بدون أي قص
+        print("================== [FULL HTML START] ==================")
+        print(html_content)
+        print("================== [FULL HTML END] ====================")
 
         elapsed_time = round(time.time() - start_time, 1)
 
-        # لو الاستجابة JSON نحاول نقراها، لو HTML نظهر الحالة
-        try:
-            data = response.json()
-            res_text = f"✅ استجابة JSON صحيحة (راجع لوجز ريلواي للتفاصيل)"
-        except:
-            res_text = f"📄 الاستجابة نصية/HTML (الحالة: {response.status_code})"
-
         await msg.edit_text(
-            f"🛡️ <b>Midasbuy Bot (Real Test)</b>\n\n"
+            f"🛡️ <b>Midasbuy Bot (Full Logged)</b>\n\n"
             f"⏱️ <b>في:</b> {elapsed_time} ثانية\n"
-            f"📊 <b>الحالة:</b> {res_text}\n"
-            f"*(تم فحص اللينك وطباعة الاستجابة الحقيقية في السيرفر)*",
+            f"✅ <b>الحالة:</b> تم طباعة الصفحة كاملة في لوجز ريلواي!",
             parse_mode="HTML"
         )
 
     except Exception as e:
-        await msg.edit_text(f"❌ خطأ: {str(e)}")
+        await msg.edit_text(f"❌ حدث خطأ: {str(e)}")
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("Real testing bot is running...")
+    print("Full HTML Logger Bot is running...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

@@ -1,20 +1,59 @@
 import json
 import logging
 import re
-from flask import Flask, request
+from flask import Flask, jsonify, request
 import requests
 
-app = Flask(__name__)
+# إعداد التسجيل (Logging)
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# إعدادات البوت (حط توكن البوت بتاعك هنا)
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+app = Flask(__name__)
+
+# ==================== الإعدادات الأساسية ====================
+TELEGRAM_BOT_TOKEN = "8967404868:AAFcNtlTD3IlqjjCeHgTIHVj0agPEUostSg"
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
+MIDASBUY_API_URL = "https://pagedooapi.midasbuy.com/api/CallMpgo/osmidas/dd_prize_service/QueryPrizeInfoList"
 
-def process_midasbuy_request(player_id, user_id, token):
-  """دالة تنفيذ طلب الميداسباي أوتوماتيك بالبيانات المستخرجة"""
-  url = "https://pagedooapi.midasbuy.com/api/CallMpgo/osmidas/dd_prize_service/QueryPrizeInfoList"
+
+# ==================== الدوال المساعدة ====================
+def extract_credentials(text):
+  """دالة مرنة لاستخراج (Player ID, User ID, Token) من أي كود cURL أو Fetch أو JSON"""
+  player_id, user_id, token = None, None, None
+
+  # 1. استخراج Player ID
+  p_match = re.search(r'["\']?player_id["\']?\s*[:=]\s*["\']?(\d+)["\']?', text)
+  if p_match:
+    player_id = p_match.group(1)
+
+  # 2. استخراج User ID / OpenID
+  u_match = re.search(
+      r'["\']?(?:user_id|openid)["\']?\s*[:=]\s*["\']?(\d+|U[a-zA-Z0-9]+)["\']?',
+      text,
+  )
+  if u_match:
+    user_id = u_match.group(1)
+
+  # 3. استخراج Token
+  t_match = re.search(
+      r'["\']?token["\']?\s*[:=]\s*["\']?([a-fA-F0-9]{32,64}|ey[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*)["\']?',
+      text,
+  )
+  if t_match:
+    token = t_match.group(1)
+
+  return player_id, user_id, token
+
+
+def execute_midasbuy_request(player_id, user_id, token):
+  """إرسال الطلب لـ Midasbuy بنفس التوكن والمعرفات"""
+  # افتراض قيم احتياطية إذا كانت بعض القيم ناقصة
+  user_id = user_id or "184958050392999208"
+  token = (
+      token
+      or "146163c10927d20b2c0c970bc46d8b619b2dee969aad2913b87de992a6e242eb"
+  )
 
   headers = {
       "accept": "application/json, text/plain, */*",
@@ -63,49 +102,81 @@ def process_midasbuy_request(player_id, user_id, token):
   }
 
   try:
-    response = requests.post(url, headers=headers, json=payload, timeout=10)
+    response = requests.post(
+        MIDASBUY_API_URL, headers=headers, json=payload, timeout=12
+    )
+    return response.status_code, response.json()
+  except requests.exceptions.JSONDecodeError:
     return response.status_code, response.text
   except Exception as e:
     return 500, str(e)
 
 
+def send_telegram_message(chat_id, text):
+  """إرسال رد للمستخدم عبر تليجرام"""
+  url = f"{TELEGRAM_API_URL}/sendMessage"
+  data = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+  try:
+    requests.post(url, json=data, timeout=5)
+  except Exception as e:
+    logger.error(f"Error sending message: {e}")
+
+
+# ==================== الـ Webhook الخاص بالسيرفر ====================
+@app.route("/", methods=["GET"])
+def index():
+  return "Bot Server is Running active!", 200
+
+
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
-  data = request.get_json()
-  if "message" in data and "text" in data["message"]:
-    chat_id = data["message"]["chat"]["id"]
-    text = data["message"]["text"]
+  update = request.get_json(silent=True)
+  if not update or "message" not in update:
+    return jsonify({"status": "ignored"}), 200
 
-    # لو المستخدم بعت كود أو بيانات، نقدر نستخرج منها المعرفات والتوكن
-    # كمثال توضيحي: لو بعث رسالة تحتوي على بيانات الميداسباي
-    if "midasbuy.com" in text or "player_id" in text:
-      # استخراج الـ player_id والـ user_id باستخدام التعبيرات المنتظمة (Regex)
-      player_id_match = re.search(r'"player_id"\s*:\s*"(\d+)"', text)
-      user_id_match = re.search(r'"user_id"\s*:\s*"(\d+)"', text)
+  message = update["message"]
+  chat_id = message["chat"]["id"]
+  text = message.get("text", "")
 
-      if player_id_match and user_id_match:
-        p_id = player_id_match.group(1)
-        u_id = user_id_match.group(1)
+  # رسالة الترحيب /start
+  if text.strip() == "/start":
+    send_telegram_message(
+        chat_id,
+        "👋 <b>أهلاً بك!</b>\nأرسل كود cURL أو Fetch أو بيانات الميداسباي"
+        " وسيتم استخراج المعرفات وتطبيق الطلب فوراً.",
+    )
+    return jsonify({"status": "ok"}), 200
 
-        # توكن افتراضي أو مستخرج من نفس النص
-        token = "146163c10927d20b2c0c970bc46d8b619b2dee969aad2913b87de992a6e242eb"
+  # تحليل النص واستخراج البيانات
+  player_id, user_id, token = extract_credentials(text)
 
-        status_code, resp_text = process_midasbuy_request(p_id, u_id, token)
+  if player_id:
+    send_telegram_message(
+        chat_id,
+        f"⏳ <b>تم العثور على المعرفات:</b>\n• Player ID:"
+        f" <code>{player_id}</code>\n• User ID:"
+        f" <code>{user_id or 'افتراضي'}</code>\n\nجاري إرسال الطلب لـ"
+        " Midasbuy...",
+    )
 
-        reply_msg = (
-            f"✅ تم استلام الطلب وتشغيله بنجاح!\n- Player ID: {p_id}\n- Status"
-            f" Code: {status_code}"
-        )
-      else:
-        reply_msg = "❌ لم يتم العثور على المعرفات المطلوبة داخل النص المرسل."
+    status_code, response_data = execute_midasbuy_request(
+        player_id, user_id, token
+    )
 
-      # إرسال الرد للتيليجرام
-      requests.post(
-          f"{TELEGRAM_API_URL}/sendMessage",
-          json={"chat_id": chat_id, "text": reply_msg},
-      )
+    reply_text = (
+        f"✅ <b>اكتمل الطلب!</b>\n"
+        f"• <b>Status Code:</b> {status_code}\n"
+        f"• <b>الاستجابة:</b>\n<pre>{json.dumps(response_data, ensure_ascii=False, indent=2) if isinstance(response_data, dict) else response_data}</pre>"
+    )
+    send_telegram_message(chat_id, reply_text)
+  else:
+    send_telegram_message(
+        chat_id,
+        "❌ لم يتم العثور على <code>player_id</code> في الرسالة المرسلة.\nيرجى"
+        " التأكد من إرسال كود cURL أو Fetch محتوياً على آيدي اللاعب.",
+    )
 
-  return "OK", 200
+  return jsonify({"status": "ok"}), 200
 
 
 if __name__ == "__main__":

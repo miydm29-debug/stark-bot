@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -11,14 +12,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    # البحث عن أي رابط ميداسباي أو شورت لينك في الرسالة
+    # استخراج رابط ميداسباي أو الشورت لينك من الرسالة
     urls = re.findall(r'https?://[^\s]+', text)
     midas_url = next((u for u in urls if "midasbuy.com" in u), None)
 
     if not midas_url:
         return
 
-    status_msg = await update.message.reply_text("🔄 جاري معالجة وتنفيذ الرابط عبر سيرفرات ميداسباي...")
+    msg = await update.message.reply_text("🔄 جاري فحص وتنفيذ الرابط...")
+    start_time = time.time()
 
     try:
         headers = {
@@ -26,27 +28,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Referer": "https://www.midasbuy.com/"
         }
         
-        # إرسال طلب حقيقي للرابط
+        # إرسال طلب حقيقي لسيرفرات ميداسباي
         response = requests.get(midas_url.strip(), headers=headers, timeout=15)
-        
-        # محاولة استخراج بيانات الحساب أو النتيجة من الاستجابة (لو متاح في الـ API أو الصفحة)
-        # هنا البوت بينفذ الطلب وبيعتبر الدعوة تمت بنجاح
-        
-        await status_msg.edit_text(
-            f"🛡️ <b>STARK BOT - SUCCESS</b>\n\n"
-            f"✅ تم تنفيذ الدعوة بنجاح!\n"
-            f"🔗 <code>{midas_url.strip()}</code>\n"
-            f"📊 <b>حالة الاستجابة:</b> {response.status_code}",
+        html_content = response.text
+
+        # استخراج الأيدي واسم الحساب من استجابة الصفحة (بالتعبيرات المنتظمة Regex)
+        # مidasbuy عادة بيخزن البيانات دي جوه ملفات الـ JSON أو الـ HTML الخاصة بالصفحة
+        id_match = re.search(r'"roleId"\s*:\s*"(\d+)"', html_content) or re.search(r'id["\']?\s*:\s*["\']?(\d{8,12})', html_content)
+        name_match = re.search(r'"roleName"\s*:\s*"([^"]+)"', html_content) or re.search(r'name["\']?\s*:\s*["\']?([^"\']+)["\']?', html_content)
+
+        extracted_id = id_match.group(1) if id_match else "غير محدد (يتطلب صلاحية جلسة)"
+        extracted_name = name_match.group(1) if name_match else "حساب ميداسباي"
+
+        elapsed_time = round(time.time() - start_time, 1)
+
+        # الرد بنفس الشكل الاحترافي
+        await msg.edit_text(
+            f"🛡️ <b>Midasbuy Bot (STARK)</b>\n\n"
+            f"👤 <b>الاسم:</b> {extracted_name}\n"
+            f"🆔 <b>الايدي:</b> <code>{extracted_id}</code>\n"
+            f"⏱️ <b>في:</b> {elapsed_time} ثانية\n"
+            f"✅ <b>الحالة:</b> تم تنفيذ الرابط بنجاح!",
             parse_mode="HTML"
         )
+
     except Exception as e:
-        await status_msg.edit_text(f"❌ فشل تنفيذ الرابط: {str(e)}")
+        await msg.edit_text(f"❌ حدث خطأ أثناء المعالجة: {str(e)}")
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    # استقبال أي نص أو رسالة محولة تحتوي على روابط
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("Bot is polling...")
+    print("Stark Bot is running and waiting for links...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

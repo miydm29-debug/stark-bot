@@ -53,7 +53,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not midas_url:
         return
 
-    msg = await update.message.reply_text("🔄 جاري فحص الرابط وطباعة اللوجز...")
+    msg = await update.message.reply_text("🔍 جاري استخراج بيانات الحساب الحقيقية...")
     start_time = time.time()
 
     try:
@@ -62,20 +62,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Referer": "https://www.midasbuy.com/"
         }
         
+        # 1. طلب الـ short_link الأساسي
         response = requests.get(midas_url.strip(), cookies=COOKIES_DICT, headers=headers, timeout=15)
         html_content = response.text
 
-        # طباعة الاستجابة بالكامل في لوجز ريلواي بدون أي أخطاء مفقودة
-        print("================== [RAW HTML START] ==================")
-        print(html_content)
-        print("================== [RAW HTML END] ====================")
+        # 2. استخراج الـ redirectUrl من متغير jsData جوا الصفحة بالريجكس
+        redirect_match = re.search(r'["\']redirectUrl["\']\s*:\s*["\']([^"\']+)["\']', html_content)
+        
+        if not redirect_match:
+            await msg.edit_text("❌ لم يتم العثور على رابط التحويل في الصفحة.")
+            return
+
+        redirect_url = redirect_match.group(1).replace(r'\u0026', '&')
+        
+        # 3. فتح رابط التحويل الحقيقي لجلب صفحة الفعالية الفعلية اللي جواها الأيدي
+        res_redirect = requests.get(redirect_url, cookies=COOKIES_DICT, headers=headers, timeout=15)
+        final_page = res_redirect.text
+
+        # 4. البحث عن رقم الأيدي (معرف اللاعب) والاسم داخل صفحة الفعالية النهائية
+        # أرقام ببجي عادة بتكون مكونة من 9 لـ 11 رقم في بيانات الـ API أو الهيدر
+        player_id_match = re.search(r'\b(\d{9,11})\b', final_page)
+        
+        # محاولة البحث عن اسم المستخدم لو موجود في الـ JSON جوه الصفحة النهائية
+        player_name = "مستخدم ميداسباي"
+        name_match = re.search(r'["\'](?:nickName|playerName|roleName|name)["\']\s*[:=]\s*["\']([^"\']+)["\']', final_page)
+        if name_match:
+            player_name = name_match.group(1)
+
+        player_id = player_id_match.group(1) if player_id_match else "غير محدد"
 
         elapsed_time = round(time.time() - start_time, 1)
 
         await msg.edit_text(
-            f"🛡️ <b>Midasbuy Bot (Clean Logged)</b>\n\n"
+            f"🛡️ <b>Midasbuy Bot (Real Extraction)</b>\n\n"
+            f"👤 <b>الاسم:</b> {player_name}\n"
+            f"🆔 <b>الايدي:</b> <code>{player_id}</code>\n"
             f"⏱️ <b>في:</b> {elapsed_time} ثانية\n"
-            f"✅ <b>الحالة:</b> تم فحص الرابط وطباعة اللوجز بنجاح!",
+            f"✅ <b>الحالة:</b> تم استخراج البيانات الحقيقية بنجاح!",
             parse_mode="HTML"
         )
 
@@ -85,8 +108,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("Clean Logger Bot is running...")
+    print("Real Extractor Bot is running...")
     app.run_polling(drop_pending_updates=True)
 
-if __name__ == '__main__':
+if __name__ == 'main__':
     main()

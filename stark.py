@@ -1,8 +1,4 @@
 import os
-import re
-import time
-import json
-import base64
 import requests
 from flask import Flask
 from threading import Thread
@@ -16,13 +12,24 @@ app_flask = Flask('')
 
 @app_flask.route('/')
 def home():
-    return "Midasbuy Bot is running successfully!"
+    return "Midasbuy AI Parser Bot is running perfectly!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app_flask.run(host='0.0.0.0', port=port)
 
-def ask_gemma(prompt_text):
+def ask_openrouter(raw_text):
+    prompt = f"""
+أنت مساعد ذكي ومحلل بيانات خبير. قم بتحليل النص التالي المستخرج من طلبات شبكة Midasbuy، واستخرج منه الخلاصة كاملة بدقة:
+- Player ID (رقم الآي دي)
+- User ID (أيدي المستخدم)
+- اسم اللاعب (Name إن وجد صريحاً أو داخل التوكن)
+- الـ Token أو الـ Session Token
+- أي بيانات تانية مهمة
+
+اكتب الخلاصة بشكل مرتب ونظيف جداً باللغة العربية:
+{raw_text}
+"""
     try:
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
@@ -32,12 +39,10 @@ def ask_gemma(prompt_text):
                 "X-Title": "MidasbuyBot",
             },
             json={
-                "model": "google/gemma-2-9b-it:free",  # موديل مجاني مستقر ومضمون
-                "messages": [
-                    {"role": "user", "content": prompt_text}
-                ]
+                "model": "meta-llama/llama-3-8b-instruct:free",
+                "messages": [{"role": "user", "content": prompt}]
             },
-            timeout=25
+            timeout=30
         )
         res_json = response.json()
         if "choices" in res_json and len(res_json["choices"]) > 0:
@@ -45,7 +50,7 @@ def ask_gemma(prompt_text):
         elif "error" in res_json:
             return f"خطأ من المزود: {res_json['error'].get('message', 'غير معروف')}"
     except Exception as e:
-        return f"خطأ اتصال: {str(e)}"
+        return f"خطأ في الاتصال: {str(e)}"
     return "لم يتم استلام رد."
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,68 +58,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    if text.lower().startswith("ai "):
-        query = text[3:].strip()
-        wait_msg = await update.message.reply_text("🤖 جاري التفكير...")
-        ai_reply = ask_gemma(query)
-        await wait_msg.edit_text(f"💡 <b>رد الذكاء الاصطناعي:</b>\n\n{ai_reply}", parse_mode="HTML")
-        return
-
-    urls = re.findall(r'https?://[^\s]+', text.replace('\n', ' '))
-    midas_url = next((u for u in urls if "midasbuy.com" in u), None)
-
-    if not midas_url:
-        return
-
-    msg = await update.message.reply_text("🔍 جاري فك الرابط وسحب البيانات بالذكاء الاصطناعي...")
-    start_time = time.time()
-
-    try:
-        target_url = midas_url
-        if "short_link" in midas_url or "api" in midas_url:
-            resp_redir = requests.get(midas_url, allow_redirects=True, timeout=10)
-            target_url = resp_redir.url
-
-        extracted_name = "غير معروف"
-        extracted_id = "غير محدد"
-        
-        # محاولة فك التوكن العادية
-        if "token=" in target_url:
-            try:
-                token_part = target_url.split("token=")[1].split("&")[0]
-                padding = '=' * (-len(token_part) % 4)
-                decoded_bytes = base64.urlsafe_b64decode(token_part + padding)
-                decoded_data = json.loads(decoded_bytes.decode('utf-8'))
-                if "name" in decoded_data:
-                    extracted_name = decoded_data["name"]
-                if "id" in decoded_data:
-                    extracted_id = str(decoded_data["id"])
-            except Exception:
-                pass
-
-        # لو الديكودنج مجاش بنتيجة، نخلي Gemma تطلعهم فوراً
-        if extracted_id == "غير محدد" or extracted_name == "غير معروف":
-            ai_analysis = ask_gemma(f"استخرج فقط رقم الأيدي (ID) واسم اللاعب من الرابط ده أو محتواه، ورد بصيغة ID: [الرقم] و Name: [الاسم] بدون أي كلام زيادة: {target_url}")
-            
-            # محاولة استخراج الأيدي والاسم من رد الذكاء الاصطناعي لو كتبهم
-            id_match = re.search(r'(?:id|الايدي)[:\s]*([0-9]+)', ai_analysis, re.IGNORECASE)
-            if id_match:
-                extracted_id = id_match.group(1)
-            
-            extracted_name = f"تحليل ذكي: {ai_analysis[:120]}"
-
-        elapsed_time = round(time.time() - start_time, 1)
-
-        await msg.edit_text(
-            f"🎯 <b>تم استخراج البيانات بالذكاء الاصطناعي!</b>\n\n"
-            f"👤 <b>الاسم:</b> {extracted_name}\n"
-            f"🆔 <b>الايدي:</b> <code>{extracted_id}</code>\n"
-            f"⏱️ <b>في:</b> {elapsed_time} ثانية",
-            parse_mode="HTML"
-        )
-
-    except Exception as e:
-        await msg.edit_text(f"❌ حدث خطأ:\n<code>{str(e)}</code>", parse_mode="HTML")
+    wait_msg = await update.message.reply_text("🤖 جاري تحليل البيانات واستخراج الخلاصة...")
+    
+    ai_result = ask_openrouter(text)
+    
+    await wait_msg.edit_text(
+        f"🎯 <b>الخلاصة من OpenRouter:</b>\n\n{ai_result}",
+        parse_mode="HTML"
+    )
 
 def main():
     t = Thread(target=run_flask)
@@ -122,7 +73,7 @@ def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("Bot is running with stable AI integration...")
+    print("Bot is running and listening to ALL messages...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

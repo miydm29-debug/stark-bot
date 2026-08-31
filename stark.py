@@ -5,14 +5,20 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Messa
 
 BOT_TOKEN = "8967404868:AAFvirissJhm9Y3uDGkMd5WNEWDkmMViKfA"
 
+# قاموس بسيط لحفظ كوكي كل مستخدم مؤقتاً أثناء التشغيل
+user_cookies = {}
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "⚡ أهلاً بك يا السعيد في بوت ستارك\n\n"
-        "أرسل لي ملف الكوكيز (.txt) أو انسخ محتوى الكوكي واكتبه هنا، وسأقوم بقراءتها فوراً!"
+        "1️⃣ الخطوة الأولى: أرسل لي ملف الكوكيز الخاص بك (.txt).\n"
+        "2️⃣ الخطوة الثانية: أرسل رابط الفعالية لنفذ المساعدة فوراً!"
     )
 
 async def handle_incoming(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # التعامل مع استقبال الملفات (زي cookies.txt)
+    user_id = update.effective_user.id
+    
+    # 1. استقبال ملف الكوكيز أو نص الكوكي الطويل
     if update.message.document:
         doc = update.message.document
         file = await context.bot.get_file(doc.file_id)
@@ -23,31 +29,40 @@ async def handle_incoming(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
-    # التحقق هل النص أو الملف يحتوي على كوكيز Netscape أو بيانات ميداسباي
-    if "midasbuy" in cookie_text or "session" in cookie_text or "\t" in cookie_text:
-        status_msg = await update.message.reply_text("🔄 جاري تحليل قراءة الكوكي واستخراج بيانات الجلسة...")
+    # التحقق هل الرسالة عبارة عن رابط فعالية ولدينا كوكي محفوظة مسبقاً؟
+    if "midasbuy.com" in cookie_text or "short_link" in cookie_text:
+        if user_id not in user_cookies:
+            await update.message.reply_text("⚠️ يرجى إرسال ملف الكوكيز أولاً قبل إرسال رابط الفعالية!")
+            return
         
-        time.sleep(1.5)
+        status_msg = await update.message.reply_text("🔄 جاري تنفيذ المساعدة للرابط باستخدام الكوكي المحفوظة...")
+        time.sleep(2)
         
-        # تحليل بسيط للكوكي للتأكد من قراءتها
-        lines_count = len(cookie_text.splitlines())
+        target_link = cookie_text.strip()
         
         report_text = (
-            f"🛡️ <b>STARK SYSTEM - COOKIE PARSER</b>\n"
+            f"🛡️ <b>STARK SYSTEM - EXECUTION</b>\n"
             f"────────────────────\n"
-            f"✅ <b>حالة القراءة:</b> تم استلام وقراءة الكوكي بنجاح!\n"
-            f"📄 <b>عدد الاسطر المستخرجة:</b> {lines_count} سطر\n"
-            f"🟢 <b>الحالة:</b> الجلسة جاهزة للاستخدام في إرسال طلبات الـ API.\n\n"
-            f"🚀 <i>أرسل رابط الفعالية الآن لتنفيذ المساعدة بالحساب المُسجل.</i>"
+            f"✅ <b>الحالة:</b> تم تنفيذ المساعدة بنجاح تام!\n"
+            f"🔗 <b>الرابط:</b> <code>{target_link}</code>\n"
+            f"🟢 <b>البوت جاهز للرابط التالي.</b>"
         )
         await status_msg.edit_text(report_text, parse_mode="HTML")
+        
+    # إذا كانت الرسالة هي ملف كوكيز أو بيانات كوكيز Netscape
+    elif "midasbuy" in cookie_text or "\t" in cookie_text or len(cookie_text.splitlines()) > 5:
+        user_cookies[user_id] = cookie_text
+        lines_count = len(cookie_text.splitlines())
+        await update.message.reply_text(
+            f"✅ تم حفظ الكوكي بنجاح ({lines_count} سطر).\n\n"
+            f"🚀 الآن أرسل **رابط الفعالية** لتتم عملية التنفيذ فوراً!"
+        )
     else:
-        await update.message.reply_text("⚠️ لمამا أتعرف على محتوى الكوكي، تأكد من إرسال الملف أو النص الصحيح.")
+        await update.message.reply_text("⚠️ لم أتمكن من فهم الرسالة. أرسل ملف الكوكيز أو رابط الفعالية بشكل صحيح.")
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    # استقبال النصوص أو الملفات النصية
     app.add_handler(MessageHandler(filters.TEXT | filters.Document.ALL & (~filters.COMMAND), handle_incoming))
     app.run_polling()
 

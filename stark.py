@@ -39,7 +39,7 @@ def ask_openrouter(raw_text):
                 "X-Title": "MidasbuyBot",
             },
             json={
-                "model": "meta-llama/llama-3-8b-instruct:free",
+                "model": "mistralai/mistral-7b-instruct:free",
                 "messages": [{"role": "user", "content": prompt}]
             },
             timeout=30

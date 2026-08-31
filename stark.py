@@ -6,12 +6,13 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 BOT_TOKEN = "8967404868:AAFvirissJhm9Y3uDGkMd5WNEWDkmMViKfA"
-MY_CHAT_ID = 6716126830  # الأيدي الخاص بك الذي استخرجناه
+MY_CHAT_ID = 6716126830
 PORT = int(os.environ.get("PORT", 8080))
 
 app_flask = Flask(__name__)
 user_cookies = {}
 
+# استقبال البيانات أوتوماتيك من سكريبت المونكي
 @app_flask.route('/webhook', methods=['POST'])
 def webhook_receiver():
     data = request.json
@@ -30,51 +31,63 @@ def webhook_receiver():
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Referer": "https://www.midasbuy.com/"
             }
+            cookies_dict = {k.strip(): v.strip() for item in user_cookies[MY_CHAT_ID].split(';') if '=' in item for k, v in [item.split('=', 1)]}
             
-            cookies_dict = {}
-            for item in user_cookies[MY_CHAT_ID].split(';'):
-                if '=' in item:
-                    k, v = item.strip().split('=', 1)
-                    cookies_dict[k] = v
-
-            # تنفيذ الطلب الحقيقي لسيرفرات ميداسباي
+            # تنفيذ الطلب الفعلي
             response = requests.get(target_link, cookies=cookies_dict, headers=headers, timeout=15)
             
-            # إرسال النتيجة إلى بوت تيليجرام الخاص بك مباشرة
             requests.post(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                 json={
                     "chat_id": MY_CHAT_ID,
-                    "text": f"🛡️ <b>STARK SYSTEM - AUTO EXECUTION</b>\n\n✅ تم تنفيذ الرابط بنجاح أوتوماتيك من متصفح ليمور!\n🔗 <code>{target_link}</code>",
+                    "text": f"🛡️ <b>STARK SYSTEM - AUTO EXECUTION</b>\n\n✅ تم تنفيذ الرابط بنجاح!\n🔗 <code>{target_link}</code>",
                     "parse_mode": "HTML"
                 }
             )
-            
-            return jsonify({"status": "success", "message": "Executed and sent to Telegram!"})
-            
+            return jsonify({"status": "success"})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
             
-    return jsonify({"status": "stored", "message": "Cookie received successfully"})
+    return jsonify({"status": "stored"})
 
 @app_flask.route('/')
 def home():
     return "Stark Bot Server is Running Live!"
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("⚡ أهلاً يا السعيد، النظام متصل ومربوط بمتصفح ليمور بنجاح.")
+# استقبال الروابط لو بعتها يدوي في شات البوت
+async def handle_manual_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text and ("midasbuy.com" in text or "short_link" in text):
+        if MY_CHAT_ID not in user_cookies:
+            await update.message.reply_text("⚠️ لم يتم استقبال الكوكي من المتصفح بعد، افتح صفحة ميداسباي في ليمور أولاً!")
+            return
+            
+        status_msg = await update.message.reply_text("🔄 جاري تنفيذ الرابط اليدوي عبر سيرفرات ميداسباي...")
+        try:
+            headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.midasbuy.com/"}
+            cookies_dict = {k.strip(): v.strip() for item in user_cookies[MY_CHAT_ID].split(';') if '=' in item for k, v in [item.split('=', 1)]}
+            
+            response = requests.get(text.strip(), cookies=cookies_dict, headers=headers, timeout=15)
+            await status_msg.edit_text(
+                f"🛡️ <b>STARK SYSTEM - MANUAL EXECUTION</b>\n\n"
+                f"✅ تم تنفيذ الرابط المرسل يدويًا بنجاح!\n"
+                f"🔗 <code>{text.strip()}</code>",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            await status_msg.edit_text(f"❌ فشل التنفيذ: {str(e)}")
+    else:
+        await update.message.reply_text("⚡ أهلاً بك يا السعيد، النظام يعمل بكامل طاقته.")
 
 def run_flask():
     app_flask.run(host="0.0.0.0", port=PORT)
 
 def main():
     import threading
-    t = threading.Thread(target=run_flask)
-    t.daemon = True
-    t.start()
+    threading.Thread(target=run_flask, daemon=True).start()
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_manual_message))
     app.run_polling()
 
 if __name__ == '__main__':

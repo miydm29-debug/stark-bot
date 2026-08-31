@@ -32,18 +32,18 @@ def ask_gemma(prompt_text):
                 "X-Title": "MidasbuyBot",
             },
             json={
-                "model": "google/gemma-4-31b-it:free",
+                "model": "google/gemma-2-9b-it:free",  # موديل مجاني مستقر ومضمون
                 "messages": [
                     {"role": "user", "content": prompt_text}
                 ]
             },
-            timeout=20
+            timeout=25
         )
         res_json = response.json()
         if "choices" in res_json and len(res_json["choices"]) > 0:
             return res_json["choices"][0]["message"]["content"].strip()
         elif "error" in res_json:
-            return f"خطأ من الموقع: {res_json['error'].get('message', 'غير معروف')}"
+            return f"خطأ من المزود: {res_json['error'].get('message', 'غير معروف')}"
     except Exception as e:
         return f"خطأ اتصال: {str(e)}"
     return "لم يتم استلام رد."
@@ -60,14 +60,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await wait_msg.edit_text(f"💡 <b>رد الذكاء الاصطناعي:</b>\n\n{ai_reply}", parse_mode="HTML")
         return
 
-    # تنظيف الرابط لو فيه مسافات أو كلام جنبه
     urls = re.findall(r'https?://[^\s]+', text.replace('\n', ' '))
     midas_url = next((u for u in urls if "midasbuy.com" in u), None)
 
     if not midas_url:
         return
 
-    msg = await update.message.reply_text("🔍 جاري فك الرابط وسحب البيانات...")
+    msg = await update.message.reply_text("🔍 جاري فك الرابط وسحب البيانات بالذكاء الاصطناعي...")
     start_time = time.time()
 
     try:
@@ -79,7 +78,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         extracted_name = "غير معروف"
         extracted_id = "غير محدد"
         
-        # محاولة استخراج التوكن بالطريقة العادية
+        # محاولة فك التوكن العادية
         if "token=" in target_url:
             try:
                 token_part = target_url.split("token=")[1].split("&")[0]
@@ -93,15 +92,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 pass
 
-        # لو التيجان أو الايدي مجاش بالطريقة العادية، نخلي Gemma تطلعه من الرابط النهائي
-        if extracted_id == "غير محدد":
-            ai_analysis = ask_gemma(f"استخرج فقط رقم الايدي (ID) واسم اللاعب من هذا الرابط أو محتواه واكتبهم باختصار شديد بدون رغي: {target_url}")
-            extracted_name = f"تحليل ذكي: {ai_analysis[:100]}"
+        # لو الديكودنج مجاش بنتيجة، نخلي Gemma تطلعهم فوراً
+        if extracted_id == "غير محدد" or extracted_name == "غير معروف":
+            ai_analysis = ask_gemma(f"استخرج فقط رقم الأيدي (ID) واسم اللاعب من الرابط ده أو محتواه، ورد بصيغة ID: [الرقم] و Name: [الاسم] بدون أي كلام زيادة: {target_url}")
+            
+            # محاولة استخراج الأيدي والاسم من رد الذكاء الاصطناعي لو كتبهم
+            id_match = re.search(r'(?:id|الايدي)[:\s]*([0-9]+)', ai_analysis, re.IGNORECASE)
+            if id_match:
+                extracted_id = id_match.group(1)
+            
+            extracted_name = f"تحليل ذكي: {ai_analysis[:120]}"
 
         elapsed_time = round(time.time() - start_time, 1)
 
         await msg.edit_text(
-            f"🎯 <b>تم استخراج بيانات الرابط بنجاح!</b>\n\n"
+            f"🎯 <b>تم استخراج البيانات بالذكاء الاصطناعي!</b>\n\n"
             f"👤 <b>الاسم:</b> {extracted_name}\n"
             f"🆔 <b>الايدي:</b> <code>{extracted_id}</code>\n"
             f"⏱️ <b>في:</b> {elapsed_time} ثانية",
@@ -109,7 +114,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        await msg.edit_text(f"❌ حدث خطأ أثناء المعالجة:\n<code>{str(e)}</code>", parse_mode="HTML")
+        await msg.edit_text(f"❌ حدث خطأ:\n<code>{str(e)}</code>", parse_mode="HTML")
 
 def main():
     t = Thread(target=run_flask)
@@ -117,7 +122,7 @@ def main():
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("Bot is running correctly with Gemma integration...")
+    print("Bot is running with stable AI integration...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

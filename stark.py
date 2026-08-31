@@ -9,7 +9,7 @@ from threading import Thread
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
-BOT_TOKEN = "8967404868:AAFvirissJhm9Y3uDGkMd5WNEWDkmMViKfA"
+BOT_TOKEN = "8967404868:AAFcNtlTD3IlqjjCeHgTIHVj0agPEUostSg"
 
 app_flask = Flask('')
 
@@ -77,7 +77,6 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     print("Bot is running correctly...")
-    # drop_pending_updates=True بتمنع حدوث مشكلة التعارض وتقفل أي جلسة قديمة معلقة
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filte
 
 BOT_TOKEN = "8967404868:AAFvirissJhm9Y3uDGkMd5WNEWDkmMViKfA"
 
-# الكوكيز الجاهزة بتاعتك اللي بتدعم الصلاحية
+# الكوكيز الحقيقية بتاعتك
 RAW_COOKIES = """
 .midasbuy.com	TRUE	/	FALSE	1795804844	_gcl_au	1.1.786793852.1788028844
 .midasbuy.com	TRUE	/	FALSE	1788279879	_gid	GA1.2.1911735912.1788028844
@@ -21,7 +21,11 @@ www.midasbuy.com	FALSE	/	TRUE	1788710337	token_for_business	Abx-vdmM1JmZ5J29
 www.midasbuy.com	FALSE	/	FALSE	1790785329	country	eg
 www.midasbuy.com	FALSE	/	FALSE	0	shopcode	midasbuy
 www.midasbuy.com	FALSE	/	TRUE	0	UUID	0606297475899457178819068874132367
+www.midasbuy.com	FALSE	/	TRUE	1788797054	shortLinkFrom	share.activity.copy.Activity_1784618952_EQXYLI.057794463750198941788189330735#f_144e9dd7568aab93afea105e053914b2#U24l6s230hkju9#63961812143834408
+www.midasbuy.com	FALSE	/	TRUE	1788797054	shortLink	2UibgT3mZl2
 .midasbuy.com	TRUE	/	FALSE	1822753319	forterToken	af9908bdb7444b4694c34638e4973aa6_1788193311213__UDF43-m4_27ck_
+www.midasbuy.com	FALSE	/	TRUE	0	session_id	
+www.midasbuy.com	FALSE	/	TRUE	0	platform_temp_token	
 www.midasbuy.com	FALSE	/	TRUE	1788798248	session_token	146163c10927d20b2c0c970bc46d8b619b2dee969aad2913b87de992a6e242eb
 .midasbuy.com	TRUE	/	FALSE	1822753480	_ga	GA1.2.1582460889.1788028844
 .midasbuy.com	TRUE	/	FALSE	1788193539	_gat_UA-21773189-2	1
@@ -52,44 +56,48 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not midas_url:
         return
 
-    msg = await update.message.reply_text("🔄 جاري معالجة الرابط عبر حسابك...")
+    msg = await update.message.reply_text("🔄 جاري فحص الرابط حقيقياً...")
     start_time = time.time()
 
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://www.midasbuy.com/"
+            "Referer": "https://www.midasbuy.com/",
+            "Accept": "application/json, text/plain, */*"
         }
         
-        # إرسال الطلب بالكوكي الحقيقية
+        # إرسال طلب حقيقي بالكوكي
         response = requests.get(midas_url.strip(), cookies=COOKIES_DICT, headers=headers, timeout=15)
-        html_content = response.text
-
-        # استخراج الأيدي واسم الحساب من استجابة الصفحة المدعومة بالكوكي
-        id_match = re.search(r'"roleId"\s*:\s*"(\d+)"', html_content) or re.search(r'id["\']?\s*:\s*["\']?(\d{8,12})', html_content)
-        name_match = re.search(r'"roleName"\s*:\s*"([^"]+)"', html_content) or re.search(r'name["\']?\s*:\s*["\']?([^"\']+)["\']?', html_content)
-
-        extracted_id = id_match.group(1) if id_match else "51650861712"  # افتراضي للتأكيد لو الصفحة محتاجة بارامتر أعمق
-        extracted_name = name_match.group(1) if name_match else "7odaa 👾"
+        
+        # طباعة الاستجابة الخام في لوجز ريلواي عشان نشوف محتواها الحقيقي بدقة
+        print(f"--- RAW RESPONSE FOR {midas_url} ---")
+        print(response.text[:1000]) # أول 1000 حرف للتأكد
+        print("---------------------------------------")
 
         elapsed_time = round(time.time() - start_time, 1)
 
+        # لو الاستجابة JSON نحاول نقراها، لو HTML نظهر الحالة
+        try:
+            data = response.json()
+            res_text = f"✅ استجابة JSON صحيحة (راجع لوجز ريلواي للتفاصيل)"
+        except:
+            res_text = f"📄 الاستجابة نصية/HTML (الحالة: {response.status_code})"
+
         await msg.edit_text(
-            f"🛡️ <b>Midasbuy Bot (STARK)</b>\n\n"
-            f"👤 <b>الاسم:</b> {extracted_name}\n"
-            f"🆔 <b>الايدي:</b> <code>{extracted_id}</code>\n"
+            f"🛡️ <b>Midasbuy Bot (Real Test)</b>\n\n"
             f"⏱️ <b>في:</b> {elapsed_time} ثانية\n"
-            f"✅ <b>الحالة:</b> تم تنفيذ الرابط بنجاح!",
+            f"📊 <b>الحالة:</b> {res_text}\n"
+            f"*(تم فحص اللينك وطباعة الاستجابة الحقيقية في السيرفر)*",
             parse_mode="HTML"
         )
 
     except Exception as e:
-        await msg.edit_text(f"❌ حدث خطأ أثناء المعالجة: {str(e)}")
+        await msg.edit_text(f"❌ خطأ: {str(e)}")
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    print("Stark Bot is running with active cookies...")
+    print("Real testing bot is running...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

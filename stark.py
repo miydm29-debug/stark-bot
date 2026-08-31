@@ -36,7 +36,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     start_time = time.time()
 
     try:
-        # الخطوة الأولى: لو الرابط قصير (short_link)، نتابع الـ Redirect عشان نجيب الرابط الكامل الحقيقي
         target_url = midas_url
         if "short_link" in midas_url:
             resp_redir = requests.get(midas_url, allow_redirects=True, timeout=10)
@@ -45,7 +44,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         extracted_name = "غير معروف"
         extracted_id = "غير محدد"
         
-        # الخطوة الثانية: استخراج وفك التوكن الحقيقي من الرابط بعد فك التوجيه
         if "token=" in target_url:
             try:
                 token_part = target_url.split("token=")[1].split("&")[0]
@@ -61,7 +59,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elapsed_time = round(time.time() - start_time, 1)
 
-        # عرض النتائج الحقيقية المستخرجة من التوكن فوراً
         await msg.edit_text(
             f"🎯 <b>تم استخراج بيانات الرابط بنجاح!</b>\n\n"
             f"👤 <b>الاسم:</b> {extracted_name}\n"
@@ -80,6 +77,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
     print("Bot is running correctly...")
+    # drop_pending_updates=True بتمنع حدوث مشكلة التعارض وتقفل أي جلسة قديمة معلقة
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
